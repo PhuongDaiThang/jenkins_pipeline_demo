@@ -1,0 +1,14 @@
+services:
+  backend:
+    image: ${BACKEND_IMAGE:-jenkins-demo-backend:latest}
+    container_name: jenkins-demo-backend
+    ports:
+      - "8080:8080"
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-jenkins-demo-frontend:latest}
+    container_name: jenkins-demo-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend

@@ -1,0 +1,39 @@
+// Optional advanced version: each stage runs in a Docker agent.
+// Use this only if your Jenkins installation has Docker Pipeline support.
+
+pipeline {
+    agent none
+
+    stages {
+        stage('Backend: Test') {
+            agent {
+                docker {
+                    image 'maven:3.9.9-eclipse-temurin-17'
+                    args '-v $HOME/.m2:/root/.m2'
+                }
+            }
+            steps {
+                checkout scm
+                dir('backend') {
+                    sh 'mvn -B test'
+                }
+            }
+        }
+
+        stage('Frontend: Test and Build') {
+            agent {
+                docker {
+                    image 'node:20-alpine'
+                }
+            }
+            steps {
+                checkout scm
+                dir('frontend') {
+                    sh 'npm install'
+                    sh 'npm test -- --run'
+                    sh 'npm run build'
+                }
+            }
+        }
+    }
+}

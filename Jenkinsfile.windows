@@ -1,0 +1,147 @@
+pipeline {
+    agent any
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        skipStagesAfterUnstable()
+    }
+
+    parameters {
+        booleanParam(
+            name: 'DEPLOY_LOCAL',
+            defaultValue: false,
+            description: 'If true, Jenkins will run docker compose locally after build.'
+        )
+    }
+
+    environment {
+        BACKEND_IMAGE_NAME = 'jenkins-demo-backend'
+        FRONTEND_IMAGE_NAME = 'jenkins-demo-frontend'
+        BACKEND_IMAGE = "${BACKEND_IMAGE_NAME}:${BUILD_NUMBER}"
+        FRONTEND_IMAGE = "${FRONTEND_IMAGE_NAME}:${BUILD_NUMBER}"
+        COMPOSE_PROJECT_NAME = 'jenkins_demo'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                bat 'git rev-parse --short HEAD || exit /b 0'
+            }
+        }
+
+        stage('Verify Tools') {
+            steps {
+                bat '''
+                    java -version
+                    mvn -version
+                    node --version
+                    npm --version
+                    docker --version
+                '''
+            }
+        }
+
+        stage('Backend: Test') {
+            steps {
+                dir('backend') {
+                    bat 'mvn -B test'
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'backend/target/surefire-reports/*.xml'
+                }
+            }
+        }
+
+        stage('Backend: Package') {
+            steps {
+                dir('backend') {
+                    bat 'mvn -B -DskipTests package'
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'backend/target/*.jar', fingerprint: true
+                }
+            }
+        }
+
+        stage('Frontend: Install Dependencies') {
+            steps {
+                dir('frontend') {
+                    bat 'npm install'
+                }
+            }
+        }
+
+        stage('Frontend: Test') {
+            steps {
+                dir('frontend') {
+                    bat 'npm test -- --run'
+                }
+            }
+        }
+
+        stage('Frontend: Build') {
+            steps {
+                dir('frontend') {
+                    bat 'npm run build'
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'frontend/dist/**', fingerprint: true
+                }
+            }
+        }
+
+        stage('Docker: Build Images') {
+            steps {
+                bat '''
+                    docker build -t %BACKEND_IMAGE% backend
+                    docker build -t %FRONTEND_IMAGE% frontend
+                '''
+            }
+        }
+
+        stage('Deploy Local Demo') {
+            when {
+                expression { return params.DEPLOY_LOCAL }
+            }
+            steps {
+                bat '''
+                    set BACKEND_IMAGE=%BACKEND_IMAGE%
+                    set FRONTEND_IMAGE=%FRONTEND_IMAGE%
+                    docker compose -f docker-compose.jenkins.yml up -d --remove-orphans
+                '''
+            }
+        }
+
+        stage('Smoke Test') {
+            when {
+                expression { return params.DEPLOY_LOCAL }
+            }
+            steps {
+                bat '''
+                    timeout /t 12 /nobreak
+                    curl -f http://localhost:8080/api/hello
+                    curl -f http://localhost:3000
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline finished successfully.'
+        }
+        failure {
+            echo 'Pipeline failed. Open the failed stage log to see the exact command/error.'
+        }
+        always {
+            echo "Build result: ${currentBuild.currentResult}"
+        }
+    }
+}
