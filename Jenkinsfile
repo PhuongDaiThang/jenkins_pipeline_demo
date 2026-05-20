@@ -110,10 +110,14 @@ pipeline {
                 dir('frontend') {
                     sh 'npm run build'
                 }
+                sh '''
+                    rm -rf dist
+                    cp -R frontend/dist dist
+                '''
             }
             post {
                 success {
-                    archiveArtifacts artifacts: 'frontend/dist/**', fingerprint: true
+                    archiveArtifacts artifacts: 'dist/**', fingerprint: true
                 }
             }
         }

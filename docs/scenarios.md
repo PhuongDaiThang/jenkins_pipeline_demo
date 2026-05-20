@@ -187,7 +187,7 @@ Bạn sẽ thấy:
 
 ```text
 backend/target/*.jar
-frontend/dist/**
+dist/**
 ```
 
 ### Học được gì?

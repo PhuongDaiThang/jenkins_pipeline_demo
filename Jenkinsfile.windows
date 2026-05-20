@@ -111,10 +111,14 @@ pipeline {
                 dir('frontend') {
                     bat 'npm run build'
                 }
+                bat '''
+                    if exist dist rmdir /s /q dist
+                    xcopy frontend\\dist dist\\ /E /I /Y
+                '''
             }
             post {
                 success {
-                    archiveArtifacts artifacts: 'frontend/dist/**', fingerprint: true
+                    archiveArtifacts artifacts: 'dist/**', fingerprint: true
                 }
             }
         }
