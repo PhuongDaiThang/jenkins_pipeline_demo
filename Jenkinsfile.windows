@@ -3,7 +3,11 @@ pipeline {
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
         skipStagesAfterUnstable()
+        timeout(time: 45, unit: 'MINUTES')
+        timestamps()
     }
 
     parameters {
@@ -43,24 +47,21 @@ pipeline {
                     node --version
                     npm --version
                 '''
-                script {
-                    if (params.BUILD_DOCKER || params.DEPLOY_LOCAL) {
-                        bat '''
-                            docker --version
-                            docker info >nul 2>&1 || (
-                                echo Docker daemon is not running. Start Docker Desktop or the Docker service before running Docker stages.
-                                exit /b 1
-                            )
-                        '''
-                    } else {
-                        bat '''
-                            docker --version >nul 2>&1 || (
-                                echo Docker CLI was not found. Skipping Docker checks because BUILD_DOCKER and DEPLOY_LOCAL are false.
-                                exit /b 0
-                            )
-                        '''
-                    }
-                }
+            }
+        }
+
+        stage('Docker: Verify') {
+            when {
+                expression { return params.BUILD_DOCKER || params.DEPLOY_LOCAL }
+            }
+            steps {
+                bat '''
+                    docker --version
+                    docker info >nul 2>&1 || (
+                        echo Docker daemon is not running. Start Docker Desktop or the Docker service before running Docker stages.
+                        exit /b 1
+                    )
+                '''
             }
         }
 
@@ -85,7 +86,8 @@ pipeline {
             }
             post {
                 success {
-                    archiveArtifacts artifacts: 'backend/target/*.jar', fingerprint: true
+                    echo 'Archiving backend jar artifacts from backend/target/*.jar'
+                    archiveArtifacts artifacts: 'backend/target/*.jar', fingerprint: true, onlyIfSuccessful: true
                 }
             }
         }
@@ -118,7 +120,8 @@ pipeline {
             }
             post {
                 success {
-                    archiveArtifacts artifacts: 'dist/**', fingerprint: true
+                    echo 'Archiving frontend static build artifacts from dist/**'
+                    archiveArtifacts artifacts: 'dist/**', fingerprint: true, onlyIfSuccessful: true
                 }
             }
         }
@@ -134,10 +137,12 @@ pipeline {
                 expression { return params.BUILD_DOCKER || params.DEPLOY_LOCAL }
             }
             steps {
-                bat '''
-                    docker build -t %BACKEND_IMAGE% backend
-                    docker build -t %FRONTEND_IMAGE% frontend
-                '''
+                retry(2) {
+                    bat '''
+                        docker build --pull -t %BACKEND_IMAGE% backend
+                        docker build --pull -t %FRONTEND_IMAGE% frontend
+                    '''
+                }
             }
         }
 
@@ -146,11 +151,13 @@ pipeline {
                 expression { return params.DEPLOY_LOCAL }
             }
             steps {
-                bat '''
-                    set BACKEND_IMAGE=%BACKEND_IMAGE%
-                    set FRONTEND_IMAGE=%FRONTEND_IMAGE%
-                    docker compose -f docker-compose.jenkins.yml up -d --remove-orphans
-                '''
+                retry(2) {
+                    bat '''
+                        set BACKEND_IMAGE=%BACKEND_IMAGE%
+                        set FRONTEND_IMAGE=%FRONTEND_IMAGE%
+                        docker compose -f docker-compose.jenkins.yml up -d --remove-orphans
+                    '''
+                }
             }
         }
 
@@ -200,6 +207,8 @@ pipeline {
         }
         always {
             echo "Build result: ${currentBuild.currentResult}"
+            echo 'Cleaning Jenkins workspace.'
+            deleteDir()
         }
     }
 }
