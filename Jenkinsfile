@@ -149,10 +149,28 @@ pipeline {
             }
             steps {
                 sh '''
-                    echo "Waiting for containers..."
-                    sleep 12
-                    curl -f http://localhost:8080/api/hello
-                    curl -f http://localhost:3000
+                    set -e
+
+                    wait_for_url() {
+                        url="$1"
+                        name="$2"
+                        i=1
+                        echo "Waiting for ${name} at ${url}"
+                        while [ "$i" -le 30 ]; do
+                            if curl -fsS "$url" >/dev/null 2>&1; then
+                                echo "${name} is ready."
+                                return 0
+                            fi
+                            echo "${name} is not ready yet. Retry ${i}/30..."
+                            sleep 2
+                            i=$((i + 1))
+                        done
+                        echo "${name} did not become ready at ${url}."
+                        return 1
+                    }
+
+                    wait_for_url http://localhost:8080/api/hello Backend
+                    wait_for_url http://localhost:5174 Frontend
                 '''
             }
         }

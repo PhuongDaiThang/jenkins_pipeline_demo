@@ -71,7 +71,7 @@ Hoặc chạy Docker:
 
 Sau khi chạy Docker:
 
-- Frontend: http://localhost:3000
+- Frontend: http://localhost:5174
 - Backend: http://localhost:8080/api/hello
 
 ## 4. Chạy từng phần bằng tay
@@ -195,7 +195,7 @@ Khi bật `BUILD_DOCKER` hoặc `DEPLOY_LOCAL`, Docker Desktop hoặc Docker ser
 
 Sau khi pass:
 
-- Frontend: http://localhost:3000
+- Frontend: http://localhost:5174
 - Backend: http://localhost:8080/api/hello
 
 Lưu ý: Jenkins agent phải chạy được Docker command.
@@ -221,7 +221,7 @@ Xem file `docs/scenarios.md` để làm từng kịch bản:
 | `node: command not found`         | Jenkins agent chưa có Node.js                             | Cài Node.js 18+/20+                                                          |
 | `docker: permission denied`       | User Jenkins chưa có quyền Docker                         | Thêm user Jenkins vào group docker hoặc chạy agent có Docker quyền hợp lệ    |
 | `Cannot connect to Docker daemon` | Docker chưa chạy hoặc Jenkins container không thấy Docker | Bật Docker Desktop hoặc mount Docker socket nếu Jenkins chạy trong container |
-| Port `8080`/`3000` đang dùng      | App khác chiếm port                                       | Tắt app cũ hoặc đổi port trong compose                                       |
+| Port `8080`/`5174` đang dùng      | App khác chiếm port                                       | Tắt app cũ hoặc đổi port trong compose                                       |
 | Frontend gọi API fail khi dev     | Backend chưa chạy                                         | Chạy backend ở port 8080 trước                                               |
 
 ## 11. Dọn container demo
