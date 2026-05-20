@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+    jdk 'JDK21',
+    maven 'Maven-3.9.11'
+    }
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         disableConcurrentBuilds()
