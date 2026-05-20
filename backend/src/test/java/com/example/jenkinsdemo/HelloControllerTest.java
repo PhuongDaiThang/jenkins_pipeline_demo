@@ -22,7 +22,7 @@ class HelloControllerTest {
     void helloShouldReturnExpectedMessage() throws Exception {
         mockMvc.perform(get("/api/hello"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message", is("Wrong message")))
+                .andExpect(jsonPath("$.message", is("Hello from Spring Boot backend")))
                 .andExpect(jsonPath("$.source", is("jenkins-demo-backend")));
     }
 }
