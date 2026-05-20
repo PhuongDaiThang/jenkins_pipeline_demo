@@ -123,6 +123,12 @@ pipeline {
             }
         }
 
+        stage('Say Hello From Pipeline') {
+            steps {
+                echo 'This stage was added by editing Jenkinsfile.'
+            }
+        }
+
         stage('Docker: Build Images') {
             when {
                 expression { return params.BUILD_DOCKER || params.DEPLOY_LOCAL }
