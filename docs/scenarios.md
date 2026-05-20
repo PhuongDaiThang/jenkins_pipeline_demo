@@ -10,6 +10,7 @@ Chạy Jenkins job với parameter mặc định:
 
 ```text
 DEPLOY_LOCAL = false
+BUILD_DOCKER = false
 ```
 
 ### Bạn nên quan sát gì?
@@ -24,7 +25,6 @@ Backend: Package
 Frontend: Install Dependencies
 Frontend: Test
 Frontend: Build
-Docker: Build Images
 ```
 
 ### Học được gì?
@@ -33,7 +33,7 @@ Docker: Build Images
 - Mỗi `stage` là một bước lớn trong pipeline.
 - Nếu stage trước pass thì stage sau mới chạy.
 - Backend test và frontend test là phần CI.
-- Docker build là bước chuẩn bị deploy.
+- Docker build là bước chuẩn bị deploy và chỉ chạy khi bật `BUILD_DOCKER` hoặc `DEPLOY_LOCAL`.
 
 ## Kịch bản 2: Làm backend test fail
 
@@ -151,6 +151,7 @@ Trong Jenkins:
 ```text
 Build with Parameters
 DEPLOY_LOCAL = true
+BUILD_DOCKER = false
 ```
 
 ### Kết quả mong đợi
@@ -158,6 +159,7 @@ DEPLOY_LOCAL = true
 Pipeline chạy thêm:
 
 ```text
+Docker: Build Images
 Deploy Local Demo
 Smoke Test
 ```

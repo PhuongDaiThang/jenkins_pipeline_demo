@@ -12,6 +12,11 @@ pipeline {
             defaultValue: false,
             description: 'If true, Jenkins will run docker compose locally after build.'
         )
+        booleanParam(
+            name: 'BUILD_DOCKER',
+            defaultValue: false,
+            description: 'If true, Jenkins will build Docker images. Docker is also required when DEPLOY_LOCAL is true.'
+        )
     }
 
     environment {
@@ -38,9 +43,23 @@ pipeline {
                     echo "Maven:" && mvn -version
                     echo "Node:" && node --version
                     echo "NPM:" && npm --version
-                    echo "Docker:" && docker --version
                     set -e
                 '''
+                script {
+                    if (params.BUILD_DOCKER || params.DEPLOY_LOCAL) {
+                        sh '''
+                            docker --version
+                            docker info >/dev/null 2>&1 || {
+                                echo "Docker daemon is not running. Start Docker Desktop or the Docker service before running Docker stages."
+                                exit 1
+                            }
+                        '''
+                    } else {
+                        sh '''
+                            docker --version >/dev/null 2>&1 || echo "Docker CLI was not found. Skipping Docker checks because BUILD_DOCKER and DEPLOY_LOCAL are false."
+                        '''
+                    }
+                }
             }
         }
 
@@ -100,6 +119,9 @@ pipeline {
         }
 
         stage('Docker: Build Images') {
+            when {
+                expression { return params.BUILD_DOCKER || params.DEPLOY_LOCAL }
+            }
             steps {
                 sh '''
                     docker build -t ${BACKEND_IMAGE} backend

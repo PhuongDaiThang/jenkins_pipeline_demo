@@ -119,7 +119,7 @@ Checkout
   -> Frontend: Install Dependencies
   -> Frontend: Test
   -> Frontend: Build
-  -> Docker: Build Images
+  -> Docker: Build Images, optional
   -> Deploy Local Demo, optional
   -> Smoke Test, optional
 ```
@@ -129,13 +129,13 @@ Checkout
 | Stage                          | Jenkins làm gì?                                     |
 | ------------------------------ | --------------------------------------------------- |
 | Checkout                       | Lấy source code từ Git                              |
-| Verify Tools                   | In version Java, Maven, Node, npm, Docker           |
+| Verify Tools                   | In version Java, Maven, Node, npm; kiểm tra Docker khi cần |
 | Backend: Test                  | Chạy unit test backend bằng Maven                   |
 | Backend: Package               | Đóng gói backend thành file `.jar`                  |
 | Frontend: Install Dependencies | Cài dependency frontend                             |
 | Frontend: Test                 | Chạy test frontend bằng Vitest                      |
 | Frontend: Build                | Build React app ra thư mục `dist`                   |
-| Docker: Build Images           | Build Docker image backend + frontend               |
+| Docker: Build Images           | Build Docker image backend + frontend nếu bật `BUILD_DOCKER` hoặc `DEPLOY_LOCAL` |
 | Deploy Local Demo              | Chạy app bằng Docker Compose nếu bật `DEPLOY_LOCAL` |
 | Smoke Test                     | Gọi thử API/frontend sau deploy                     |
 
@@ -180,7 +180,9 @@ Nếu repo private, cần thêm credential GitHub/GitLab/Bitbucket trong Jenkins
 
 ## 8. Deploy local bằng Jenkins
 
-Mặc định pipeline chỉ build/test/package/docker build.
+Mặc định pipeline chỉ build/test/package và archive artifact.
+
+Muốn Jenkins build Docker image nhưng chưa deploy, vào **Build with Parameters** và tick `BUILD_DOCKER = true`.
 
 Muốn Jenkins chạy container thật sau khi build:
 
@@ -188,6 +190,8 @@ Muốn Jenkins chạy container thật sau khi build:
 2. Chọn **Build with Parameters**.
 3. Tick `DEPLOY_LOCAL = true`.
 4. Bấm Build.
+
+Khi bật `BUILD_DOCKER` hoặc `DEPLOY_LOCAL`, Docker Desktop hoặc Docker service phải đang chạy trên Jenkins agent.
 
 Sau khi pass:
 

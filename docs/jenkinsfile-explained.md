@@ -23,11 +23,14 @@ Trong project này có:
 
 ```groovy
 DEPLOY_LOCAL
+BUILD_DOCKER
 ```
 
-Nếu `false`: chỉ build/test/docker build.
+Nếu cả hai đều `false`: chỉ build/test/package và archive artifact.
 
-Nếu `true`: Jenkins deploy app bằng Docker Compose và smoke test.
+Nếu `BUILD_DOCKER = true`: Jenkins build Docker image backend/frontend.
+
+Nếu `DEPLOY_LOCAL = true`: Jenkins build Docker image, deploy app bằng Docker Compose và smoke test.
 
 ## `environment`
 
@@ -98,11 +101,11 @@ archiveArtifacts artifacts: 'backend/target/*.jar', fingerprint: true
 
 ```groovy
 when {
-    expression { return params.DEPLOY_LOCAL }
+    expression { return params.BUILD_DOCKER || params.DEPLOY_LOCAL }
 }
 ```
 
-Nghĩa là stage chỉ chạy khi bạn bật parameter `DEPLOY_LOCAL`.
+Nghĩa là stage chỉ chạy khi bạn bật `BUILD_DOCKER` hoặc `DEPLOY_LOCAL`.
 
 ## `post`
 
