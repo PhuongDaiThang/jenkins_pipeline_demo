@@ -6,7 +6,6 @@ export default function App() {
   const [data, setData] = useState<HelloResponse | null>(null)
   const [error, setError] = useState<string>('')
   const [loading, setLoading] = useState(true)
-  const broken: string = 123
 
   useEffect(() => {
     fetchHello()
