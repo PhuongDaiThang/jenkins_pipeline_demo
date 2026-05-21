@@ -56,7 +56,12 @@ pipeline {
 
         stage('Docker: Verify') {
             when {
-                expression { return params.BUILD_DOCKER || params.DEPLOY_LOCAL }
+                expression {
+                    if (env.BRANCH_NAME) {
+                        return env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'develop'
+                    }
+                    return params.BUILD_DOCKER || params.DEPLOY_LOCAL
+                }
             }
             steps {
                 bat '''
@@ -138,7 +143,12 @@ pipeline {
 
         stage('Docker: Build Images') {
             when {
-                expression { return params.BUILD_DOCKER || params.DEPLOY_LOCAL }
+                expression {
+                    if (env.BRANCH_NAME) {
+                        return env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'develop'
+                    }
+                    return params.BUILD_DOCKER || params.DEPLOY_LOCAL
+                }
             }
             steps {
                 retry(2) {
@@ -152,7 +162,12 @@ pipeline {
 
         stage('Deploy Local Demo') {
             when {
-                expression { return params.DEPLOY_LOCAL }
+                expression {
+                    if (env.BRANCH_NAME) {
+                        return env.BRANCH_NAME == 'main'
+                    }
+                    return params.DEPLOY_LOCAL
+                }
             }
             steps {
                 retry(2) {
@@ -167,7 +182,12 @@ pipeline {
 
         stage('Smoke Test') {
             when {
-                expression { return params.DEPLOY_LOCAL }
+                expression {
+                    if (env.BRANCH_NAME) {
+                        return env.BRANCH_NAME == 'main'
+                    }
+                    return params.DEPLOY_LOCAL
+                }
             }
             steps {
                 powershell '''
