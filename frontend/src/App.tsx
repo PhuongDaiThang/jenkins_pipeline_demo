@@ -21,7 +21,7 @@ export default function App() {
     <main className="page">
       <section className="card">
         <p className="eyebrow">CI/CD learning project</p>
-        <h1>Jenkins + Spring Boot + React Vite</h1>
+        <h1>Jenkins Multibranch Demo</h1>
         <p className="description">
           This tiny app is designed for testing Jenkins Pipeline stages: backend test,
           backend package, frontend test, frontend build, Docker build, and local deploy.
