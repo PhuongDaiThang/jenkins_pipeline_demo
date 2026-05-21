@@ -25,21 +25,104 @@ pipeline {
             defaultValue: false,
             description: 'If true, Jenkins will build Docker images. Docker is also required when DEPLOY_LOCAL is true.'
         )
+        booleanParam(
+            name: 'PUSH_IMAGES',
+            defaultValue: false,
+            description: 'For non-multibranch jobs, push Docker images to Docker Hub after building.'
+        )
+        booleanParam(
+            name: 'RUN_SECURITY_SCAN',
+            defaultValue: false,
+            description: 'Run npm audit, Maven dependency-check, and Docker image scan if tools are available.'
+        )
+        booleanParam(
+            name: 'DEPLOY_STAGING',
+            defaultValue: false,
+            description: 'For non-multibranch jobs, deploy to staging over SSH after pushing images.'
+        )
+        booleanParam(
+            name: 'DEPLOY_PRODUCTION',
+            defaultValue: false,
+            description: 'If true on main, require manual approval before production deploy.'
+        )
+        booleanParam(
+            name: 'DISCORD_NOTIFY',
+            defaultValue: false,
+            description: 'Send build notifications to Discord using Jenkins credential discord-webhook-url.'
+        )
+        string(
+            name: 'DOCKER_NAMESPACE',
+            defaultValue: 'phuongdaithang',
+            description: 'Docker Hub namespace or organization, for example phuongdaithang.'
+        )
+        string(
+            name: 'STAGING_HOST',
+            defaultValue: '',
+            description: 'Staging server hostname or IP. Required for staging deploy.'
+        )
+        string(
+            name: 'STAGING_USER',
+            defaultValue: 'deploy',
+            description: 'SSH user for staging deploy.'
+        )
+        string(
+            name: 'STAGING_DEPLOY_DIR',
+            defaultValue: '/opt/jenkins-demo',
+            description: 'Directory on staging server containing docker-compose.yml.'
+        )
+        string(
+            name: 'STAGING_SMOKE_URL',
+            defaultValue: '',
+            description: 'Staging smoke test URL, for example https://staging.example.com/api/hello.'
+        )
+        string(
+            name: 'PRODUCTION_HOST',
+            defaultValue: '',
+            description: 'Production server hostname or IP. Required only when DEPLOY_PRODUCTION is true.'
+        )
+        string(
+            name: 'PRODUCTION_USER',
+            defaultValue: 'deploy',
+            description: 'SSH user for production deploy.'
+        )
+        string(
+            name: 'PRODUCTION_DEPLOY_DIR',
+            defaultValue: '/opt/jenkins-demo',
+            description: 'Directory on production server containing docker-compose.yml.'
+        )
+        string(
+            name: 'PRODUCTION_SMOKE_URL',
+            defaultValue: '',
+            description: 'Production smoke test URL.'
+        )
     }
 
     environment {
         BACKEND_IMAGE_NAME = 'jenkins-demo-backend'
         FRONTEND_IMAGE_NAME = 'jenkins-demo-frontend'
-        BACKEND_IMAGE = "${BACKEND_IMAGE_NAME}:${BUILD_NUMBER}"
-        FRONTEND_IMAGE = "${FRONTEND_IMAGE_NAME}:${BUILD_NUMBER}"
+        BACKEND_IMAGE = ''
+        FRONTEND_IMAGE = ''
+        GIT_SHA = ''
         COMPOSE_PROJECT_NAME = 'jenkins_demo'
+        DOCKERHUB_CREDENTIALS_ID = 'dockerhub-credentials'
+        STAGING_SSH_CREDENTIALS_ID = 'staging-ssh-key'
+        PRODUCTION_SSH_CREDENTIALS_ID = 'production-ssh-key'
+        DISCORD_WEBHOOK_CREDENTIALS_ID = 'discord-webhook-url'
     }
 
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
-                bat 'git rev-parse --short HEAD || exit /b 0'
+                script {
+                    env.GIT_SHA = bat(returnStdout: true, script: '@git rev-parse --short HEAD').trim()
+                    env.BACKEND_IMAGE = "${params.DOCKER_NAMESPACE}/${env.BACKEND_IMAGE_NAME}:${env.GIT_SHA}"
+                    env.FRONTEND_IMAGE = "${params.DOCKER_NAMESPACE}/${env.FRONTEND_IMAGE_NAME}:${env.GIT_SHA}"
+                }
+                echo "Branch: ${env.BRANCH_NAME ?: 'single-branch-job'}"
+                echo "Commit SHA: ${env.GIT_SHA}"
+                echo "Backend image: ${env.BACKEND_IMAGE}"
+                echo "Frontend image: ${env.FRONTEND_IMAGE}"
             }
         }
 
@@ -60,7 +143,7 @@ pipeline {
                     if (env.BRANCH_NAME) {
                         return env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'develop'
                     }
-                    return params.BUILD_DOCKER || params.DEPLOY_LOCAL
+                    return params.BUILD_DOCKER || params.PUSH_IMAGES || params.DEPLOY_LOCAL || params.DEPLOY_STAGING || params.DEPLOY_PRODUCTION
                 }
             }
             steps {
@@ -74,6 +157,14 @@ pipeline {
             }
         }
 
+        stage('Backend: Checkstyle') {
+            steps {
+                dir('backend') {
+                    bat 'mvn -B checkstyle:check'
+                }
+            }
+        }
+
         stage('Backend: Test') {
             steps {
                 dir('backend') {
@@ -83,6 +174,7 @@ pipeline {
             post {
                 always {
                     junit allowEmptyResults: true, testResults: 'backend/target/surefire-reports/*.xml'
+                    archiveArtifacts artifacts: 'backend/target/site/jacoco/**', allowEmptyArchive: true, fingerprint: true
                 }
             }
         }
@@ -109,10 +201,37 @@ pipeline {
             }
         }
 
+        stage('Frontend: Lint') {
+            steps {
+                dir('frontend') {
+                    bat 'npm run lint'
+                }
+            }
+        }
+
         stage('Frontend: Test') {
             steps {
                 dir('frontend') {
                     bat 'npm test -- --run'
+                }
+            }
+        }
+
+        stage('Security: Dependency Scan') {
+            when {
+                expression { return params.RUN_SECURITY_SCAN }
+            }
+            steps {
+                dir('frontend') {
+                    bat 'npm audit --audit-level=high'
+                }
+                dir('backend') {
+                    bat 'mvn -B org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7'
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'backend/target/dependency-check-report.*', allowEmptyArchive: true, fingerprint: true
                 }
             }
         }
@@ -147,7 +266,7 @@ pipeline {
                     if (env.BRANCH_NAME) {
                         return env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'develop'
                     }
-                    return params.BUILD_DOCKER || params.DEPLOY_LOCAL
+                    return params.BUILD_DOCKER || params.PUSH_IMAGES || params.DEPLOY_LOCAL || params.DEPLOY_STAGING || params.DEPLOY_PRODUCTION
                 }
             }
             steps {
@@ -155,8 +274,50 @@ pipeline {
                     bat '''
                         docker build --pull -t %BACKEND_IMAGE% backend
                         docker build --pull -t %FRONTEND_IMAGE% frontend
+                        echo Built Docker images:
+                        echo   %BACKEND_IMAGE%
+                        echo   %FRONTEND_IMAGE%
                     '''
                 }
+            }
+        }
+
+        stage('Docker: Push Images') {
+            when {
+                expression {
+                    if (env.BRANCH_NAME) {
+                        return env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'develop'
+                    }
+                    return params.PUSH_IMAGES || params.DEPLOY_STAGING || params.DEPLOY_PRODUCTION
+                }
+            }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: env.DOCKERHUB_CREDENTIALS_ID,
+                    usernameVariable: 'DOCKERHUB_USER',
+                    passwordVariable: 'DOCKERHUB_TOKEN'
+                )]) {
+                    retry(2) {
+                        bat '''
+                            echo %DOCKERHUB_TOKEN% | docker login -u %DOCKERHUB_USER% --password-stdin
+                            docker push %BACKEND_IMAGE%
+                            docker push %FRONTEND_IMAGE%
+                            docker logout
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Security: Image Scan') {
+            when {
+                expression { return params.RUN_SECURITY_SCAN && (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'develop' || params.BUILD_DOCKER || params.PUSH_IMAGES) }
+            }
+            steps {
+                bat '''
+                    trivy image --exit-code 1 --severity HIGH,CRITICAL %BACKEND_IMAGE%
+                    trivy image --exit-code 1 --severity HIGH,CRITICAL %FRONTEND_IMAGE%
+                '''
             }
         }
 
@@ -164,7 +325,7 @@ pipeline {
             when {
                 expression {
                     if (env.BRANCH_NAME) {
-                        return env.BRANCH_NAME == 'main'
+                        return false
                     }
                     return params.DEPLOY_LOCAL
                 }
@@ -177,6 +338,93 @@ pipeline {
                         docker compose -f docker-compose.jenkins.yml up -d --remove-orphans
                     '''
                 }
+            }
+        }
+
+        stage('Deploy Staging') {
+            when {
+                expression {
+                    def shouldDeploy = env.BRANCH_NAME == 'main' || (!env.BRANCH_NAME && params.DEPLOY_STAGING)
+                    return shouldDeploy && params.STAGING_HOST?.trim()
+                }
+            }
+            steps {
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: env.STAGING_SSH_CREDENTIALS_ID,
+                    keyFileVariable: 'SSH_KEY_FILE'
+                )]) {
+                    powershell '''
+                        $ErrorActionPreference = 'Stop'
+                        $remote = "$env:STAGING_USER@$env:STAGING_HOST"
+                        $imageEnv = "BACKEND_IMAGE='$env:BACKEND_IMAGE' FRONTEND_IMAGE='$env:FRONTEND_IMAGE'"
+                        $command = "cd '$env:STAGING_DEPLOY_DIR' && $imageEnv docker compose pull && $imageEnv docker compose up -d"
+
+                        Write-Host "Deploying staging to $remote"
+                        ssh -i "$env:SSH_KEY_FILE" -o StrictHostKeyChecking=no $remote $command
+                    '''
+                }
+            }
+        }
+
+        stage('Smoke Test Staging') {
+            when {
+                expression {
+                    def shouldDeploy = env.BRANCH_NAME == 'main' || (!env.BRANCH_NAME && params.DEPLOY_STAGING)
+                    return shouldDeploy && params.STAGING_SMOKE_URL?.trim()
+                }
+            }
+            steps {
+                powershell '''
+                    $ErrorActionPreference = 'Stop'
+                    Write-Host "Smoke testing staging endpoint: $env:STAGING_SMOKE_URL"
+                    Invoke-WebRequest -Uri "$env:STAGING_SMOKE_URL" -UseBasicParsing -TimeoutSec 15 | Out-Null
+                    Write-Host "Staging smoke test passed."
+                '''
+            }
+        }
+
+        stage('Approve Production Deploy') {
+            when {
+                expression { return env.BRANCH_NAME == 'main' && params.DEPLOY_PRODUCTION }
+            }
+            steps {
+                input message: 'Deploy to production?', ok: 'Deploy', submitter: 'release-manager,admin'
+            }
+        }
+
+        stage('Deploy Production') {
+            when {
+                expression { return env.BRANCH_NAME == 'main' && params.DEPLOY_PRODUCTION && params.PRODUCTION_HOST?.trim() }
+            }
+            steps {
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: env.PRODUCTION_SSH_CREDENTIALS_ID,
+                    keyFileVariable: 'SSH_KEY_FILE'
+                )]) {
+                    powershell '''
+                        $ErrorActionPreference = 'Stop'
+                        $remote = "$env:PRODUCTION_USER@$env:PRODUCTION_HOST"
+                        $imageEnv = "BACKEND_IMAGE='$env:BACKEND_IMAGE' FRONTEND_IMAGE='$env:FRONTEND_IMAGE'"
+                        $command = "cd '$env:PRODUCTION_DEPLOY_DIR' && $imageEnv docker compose pull && $imageEnv docker compose up -d"
+
+                        Write-Host "Deploying production to $remote"
+                        ssh -i "$env:SSH_KEY_FILE" -o StrictHostKeyChecking=no $remote $command
+                    '''
+                }
+            }
+        }
+
+        stage('Smoke Test Production') {
+            when {
+                expression { return env.BRANCH_NAME == 'main' && params.DEPLOY_PRODUCTION && params.PRODUCTION_SMOKE_URL?.trim() }
+            }
+            steps {
+                powershell '''
+                    $ErrorActionPreference = 'Stop'
+                    Write-Host "Smoke testing production endpoint: $env:PRODUCTION_SMOKE_URL"
+                    Invoke-WebRequest -Uri "$env:PRODUCTION_SMOKE_URL" -UseBasicParsing -TimeoutSec 15 | Out-Null
+                    Write-Host "Production smoke test passed."
+                '''
             }
         }
 
@@ -231,6 +479,23 @@ pipeline {
         }
         always {
             echo "Build result: ${currentBuild.currentResult}"
+            echo "Docker image tag: ${env.GIT_SHA}"
+            echo "Backend image: ${env.BACKEND_IMAGE}"
+            echo "Frontend image: ${env.FRONTEND_IMAGE}"
+            script {
+                env.BUILD_RESULT = currentBuild.currentResult
+                if (params.DISCORD_NOTIFY) {
+                    withCredentials([string(credentialsId: env.DISCORD_WEBHOOK_CREDENTIALS_ID, variable: 'DISCORD_WEBHOOK_URL')]) {
+                        powershell '''
+                            $ErrorActionPreference = 'Stop'
+                            $payload = @{
+                                content = "Jenkins: $env:JOB_NAME #$env:BUILD_NUMBER [$env:BRANCH_NAME] $env:BUILD_RESULT commit $env:GIT_SHA $env:BUILD_URL"
+                            } | ConvertTo-Json
+                            Invoke-RestMethod -Uri "$env:DISCORD_WEBHOOK_URL" -Method Post -ContentType 'application/json' -Body $payload | Out-Null
+                        '''
+                    }
+                }
+            }
             echo 'Cleaning Jenkins workspace.'
             deleteDir()
         }
